@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Maze Runner</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --accent: #38bdf8;
+            --player: #fb923c;
+            --player-glow: 0 0 15px #fb923c;
+            --wall: #1e293b;
+            --text-color: #ffffff;
+            --ring-inner-color: rgba(56, 189, 248, 0.2);
+            --glow: 0 0 15px rgba(56, 189, 248, 0.6);
+            --glass: rgba(255, 255, 255, 0.05);
+        }
+
+        body {
+            background-color: #000;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            touch-action: none; /* Critical for dragging on mobile */
+        }
+
+        .mobile-screen {
+            width: 100vw;
+            height: 100vh;
+            max-width: 393px; 
+            max-height: 852px; 
+            background-color: var(--bg-color);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            height: 70px;
+            background: var(--glass);
+            border-bottom: 1px solid var(--ring-inner-color);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            z-index: 10;
+            flex-shrink: 0;
+        }
+
+        .stats {
+            color: var(--accent);
+            text-shadow: var(--glow);
+            font-weight: 800;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        .stats span { display: block; font-size: 1.2rem; }
+
+        #game-canvas {
+            flex-grow: 1;
+            background: #0b1120;
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        #win-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 100;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .win-card {
+            background: var(--glass);
+            border: 1px solid var(--accent);
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: var(--glow);
+        }
+
+        .btn {
+            background: var(--accent);
+            border: none;
+            color: #0f172a;
+            padding: 12px 30px;
+            border-radius: 50px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+<div class="mobile-screen">
+    <div class="header">
+        <div class="stats">TIME<span id="timer-val">0</span></div>
+        <div class="stats">ATTEMPTS<span id="attempt-val">1</span></div>
+    </div>
+
+    <canvas id="game-canvas"></canvas>
+
+    <div id="win-overlay">
+        <div class="win-card">
+            <h2 style="color: var(--accent); margin: 0; letter-spacing: 2px;">MAZE CLEARED</h2>
+            <p style="color: #94a3b8;">Total Time: <span id="final-time">0</span>s</p>
+            <p style="color: #94a3b8;">Total Attempts: <span id="final-attempts">0</span></p>
+            <button class="btn" onclick="initGame()">Restart Maze</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const timerDisplay = document.getElementById('timer-val');
+    const attemptDisplay = document.getElementById('attempt-val');
+    const winOverlay = document.getElementById('win-overlay');
+
+    let player = { x: 40, y: 40, radius: 10, isDragging: false };
+    let goal = { x: 0, y: 0, width: 60, height: 60 };
+    let startTime, timerInterval;
+    let attempts = 1;
+    let walls = [];
+
+    function resize() {
+        // Match canvas to the flex container size
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+        generateMaze();
+    }
+
+    function generateMaze() {
+        const w = canvas.width;
+        const h = canvas.height;
+        
+        // Define simple maze walls [x, y, width, height]
+        // This creates a "Snake" path through the screen
+        walls = [
+            [0, 80, w * 0.8, 20],        // Wall 1
+            [w * 0.2, 180, w * 0.8, 20], // Wall 2
+            [0, 280, w * 0.8, 20],       // Wall 3
+            [w * 0.2, 380, w * 0.8, 20], // Wall 4
+            [0, 480, w * 0.8, 20],       // Wall 5
+            [w * 0.2, 580, w * 0.8, 20], // Wall 6
+            [0, 680, w * 0.8, 20],       // Wall 7
+        ];
+
+        player.x = 40;
+        player.y = 40;
+        goal.x = w - 70;
+        goal.y = h - 70;
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Goal
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.1)';
+        ctx.strokeStyle = 'var(--accent)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(goal.x, goal.y, goal.width, goal.height);
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'var(--accent)';
+        ctx.font = '10px Segoe UI';
+        ctx.fillText('EXIT', goal.x + 18, goal.y + 35);
+
+        // Draw Walls
+        ctx.fillStyle = '#1e293b';
+        ctx.shadowBlur = 0;
+        walls.forEach(w => {
+            ctx.fillRect(w[0], w[1], w[2], w[3]);
+        });
+
+        // Draw Player (The Glowy Dot)
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#fb923c';
+        ctx.shadowColor = '#fb923c';
+        ctx.shadowBlur = 15;
+        ctx.fill();
+        ctx.shadowBlur = 0; // Reset for other elements
+    }
+
+    function checkCollision(nx, ny) {
+        // Check screen boundaries
+        if (nx < 10 || nx > canvas.width - 10 || ny < 10 || ny > canvas.height - 10) return true;
+
+        // Check walls
+        for (let w of walls) {
+            if (nx + 8 > w[0] && nx - 8 < w[0] + w[2] && 
+                ny + 8 > w[1] && ny - 8 < w[1] + w[3]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function handleMove(e) {
+        if (!player.isDragging) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        const newX = clientX - rect.left;
+        const newY = clientY - rect.top;
+
+        if (checkCollision(newX, newY)) {
+            // Hit a wall! Reset.
+            player.x = 40;
+            player.y = 40;
+            player.isDragging = false;
+            attempts++;
+            attemptDisplay.innerText = attempts;
+        } else {
+            player.x = newX;
+            player.y = newY;
+
+            // Check Win
+            if (player.x > goal.x && player.y > goal.y) {
+                handleWin();
+            }
+        }
+        draw();
+    }
+
+    function handleWin() {
+        player.isDragging = false;
+        clearInterval(timerInterval);
+        document.getElementById('final-time').innerText = timerDisplay.innerText;
+        document.getElementById('final-attempts').innerText = attempts;
+        winOverlay.style.display = 'flex';
+    }
+
+    function initGame() {
+        attempts = 1;
+        attemptDisplay.innerText = attempts;
+        timerDisplay.innerText = 0;
+        winOverlay.style.display = 'none';
+        
+        startTime = Date.now();
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            timerDisplay.innerText = Math.floor((Date.now() - startTime) / 1000);
+        }, 1000);
+
+        resize();
+        draw();
+    }
+
+    // Interaction Listeners
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        // Check if clicking near the dot
+        const dist = Math.hypot(mouseX - player.x, mouseY - player.y);
+        if (dist < 30) player.isDragging = true;
+    });
+
+    canvas.addEventListener('touchstart', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const touchX = e.touches[0].clientX - rect.left;
+        const touchY = e.touches[0].clientY - rect.top;
+        const dist = Math.hypot(touchX - player.x, touchY - player.y);
+        if (dist < 40) {
+            e.preventDefault(); 
+            player.isDragging = true;
+        }
+    }, {passive: false});
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('touchmove', handleMove, {passive: false});
+    window.addEventListener('mouseup', () => player.isDragging = false);
+    window.addEventListener('touchend', () => player.isDragging = false);
+
+    // Startup
+    window.onload = initGame;
+</script>
+
+</body>
+</html>
