@@ -3,18 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Maze Runner</title>
+    <title>Fixed Clock, RK & Maze</title>
     <style>
         :root {
             --bg-color: #0f172a;
             --accent: #38bdf8;
-            --player: #fb923c;
-            --player-glow: 0 0 15px #fb923c;
-            --wall: #1e293b;
             --text-color: #ffffff;
+            --ring-outer-color: rgba(56, 189, 248, 0.2);
             --ring-inner-color: rgba(56, 189, 248, 0.2);
             --glow: 0 0 15px rgba(56, 189, 248, 0.6);
             --glass: rgba(255, 255, 255, 0.05);
+            --exit-mint: #52F2E2;
         }
 
         body {
@@ -26,7 +25,7 @@
             height: 100vh;
             overflow: hidden;
             font-family: 'Segoe UI', system-ui, sans-serif;
-            touch-action: none; /* Critical for dragging on mobile */
+            touch-action: none;
         }
 
         .mobile-screen {
@@ -38,12 +37,36 @@
             position: relative;
             overflow: hidden;
             box-shadow: 0 0 50px rgba(0,0,0,0.8);
-            display: flex;
+            display: flex; /* Added to ensure children like .view fill correctly */
             flex-direction: column;
         }
 
+        /* View Management */
+        .view { display: none; width: 100%; height: 100%; position: absolute; inset: 0; flex-direction: column; }
+        .view.active { display: flex; }
+
+        /* --- CLOCK STYLES --- */
+        .clock-section { position: absolute; top: -60px; left: -80px; width: 350px; height: 350px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .time-display { font-size: 3rem; margin-bottom: 10px; font-weight: 800; color: var(--accent); text-shadow: var(--glow); transform: translate(230px, 90px); }
+        .clock-container { position: relative; width: 350px; height: 350px; display: flex; justify-content: center; align-items: center; }
+        .pointers { position: absolute; width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0 5px; box-sizing: border-box; z-index: 10; pointer-events: none; }
+        .arrow-outer { position: absolute; right: -35px; width: 0; height: 0; border-top: 12px solid transparent; border-bottom: 12px solid transparent; border-right: 18px solid var(--accent); filter: drop-shadow(0 0 5px var(--accent)); }
+        .arrow-inner { position: absolute; left: 225px; width: 0; height: 0; border-top: 12px solid transparent; border-bottom: 12px solid transparent; border-left: 18px solid var(--accent); filter: drop-shadow(0 0 5px var(--accent)); }
+        .ring { position: absolute; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: grab; transition: transform 0.1s linear; user-select: none; background: rgba(255, 255, 255, 0.02); }
+        #outer-ring { width: 350px; height: 350px; border: 4px solid var(--ring-outer-color); box-shadow: inset 0 0 15px rgba(250,250,250,1); }
+        #inner-ring { width: 250px; height: 250px; border: 4px solid var(--ring-inner-color); box-shadow: inset 0 0 15px rgba(0,0,0,1); }
+        .number { position: absolute; width: 30px; height: 30px; text-align: center; line-height: 30px; font-weight: 600; font-size: 1.5rem; color: #94a3b8; }
+
+        /* --- LOCK STYLES --- */
+        .lock-section { position: absolute; bottom: -50px; right: -50px; width: 320px; height: 320px; transition: filter 0.3s ease; }
+        #lock-svg { width: 100%; height: 100%; transform: rotate(-105deg); overflow: visible; }
+        .ring-bg { fill: none; stroke: rgba(255,255,255,0.1); stroke-width: 19; }
+        .ring-progress { fill: none; stroke: var(--accent); stroke-width: 14; stroke-linecap: round; filter: drop-shadow(0 0 5px var(--accent)); }
+        .finish-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #64748b; font-family: serif; font-style: italic; font-size: 1.4rem; pointer-events: none; }
+
+        /* --- SHARED HEADER --- */
         .header {
-            height: 70px;
+            height: 60px;
             background: var(--glass);
             border-bottom: 1px solid var(--ring-inner-color);
             display: flex;
@@ -52,35 +75,55 @@
             z-index: 10;
             flex-shrink: 0;
         }
+        .stats { color: var(--accent); text-shadow: var(--glow); font-weight: 800; font-size: 1.1rem; }
 
-        .stats {
-            color: var(--accent);
-            text-shadow: var(--glow);
-            font-weight: 800;
-            font-size: 0.9rem;
-            text-align: center;
-        }
-
-        .stats span { display: block; font-size: 1.2rem; }
-
-        #game-canvas {
+        /* --- RK GAME --- */
+        #game-grid {
             flex-grow: 1;
+            display: grid;
+            grid-template-rows: repeat(22, 1fr);
+            padding: 5px 10px;
+            overflow: hidden;
             background: #0b1120;
-            cursor: crosshair;
-            touch-action: none;
+        }
+        .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            color: #1e293b;
+            font-size: 1.7rem;
+            letter-spacing: 2px;
+        }
+        .char { cursor: pointer; user-select: none; }
+        .target { color: #0f172a; }
+
+        /* --- MAZE GAME FIXED --- */
+        #view-maze {
+            display: none;
+            flex-direction: column; /* Stacks header and canvas vertically */
+        }
+        #view-maze.active {
+            display: flex;
+        }
+        #game-canvas {
+            flex-grow: 1; /* This forces the canvas to take up all available vertical space */
+            width: 100%;
+            background: #0b1120;
+            display: block;
         }
 
         #win-overlay {
             display: none;
             position: absolute;
             inset: 0;
-            background: rgba(15, 23, 42, 0.95);
+            background: rgba(15, 23, 42, 0.9);
             z-index: 100;
             flex-direction: column;
             justify-content: center;
             align-items: center;
         }
-
         .win-card {
             background: var(--glass);
             border: 1px solid var(--accent);
@@ -89,209 +132,375 @@
             text-align: center;
             box-shadow: var(--glow);
         }
-
         .btn {
-            background: var(--accent);
-            border: none;
-            color: #0f172a;
-            padding: 12px 30px;
-            border-radius: 50px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 15px;
-            text-transform: uppercase;
+            background: var(--accent); border: none; color: #0f172a;
+            padding: 10px 25px; border-radius: 50px;
+            font-weight: bold; cursor: pointer; margin-top: 15px;
         }
     </style>
 </head>
 <body>
 
 <div class="mobile-screen">
-    <div class="header">
-        <div class="stats">TIME<span id="timer-val">0</span></div>
-        <div class="stats">ATTEMPTS<span id="attempt-val">1</span></div>
+    <div id="view-clock" class="view active">
+        <div class="clock-section">
+            <div class="time-display" id="display">12:00</div>
+            <div class="clock-container">
+                <div class="pointers"><div class="arrow-inner"></div><div class="arrow-outer"></div></div>
+                <div id="outer-ring" class="ring"></div>
+                <div id="inner-ring" class="ring"></div>
+            </div>
+        </div>
+        <div class="lock-section" id="lock-zone">
+            <div class="finish-label">finish</div>
+            <svg viewBox="0 0 150 150" id="lock-svg">
+                <circle class="ring-bg" cx="75" cy="75" r="50" />
+                <circle id="progress" class="ring-progress" cx="75" cy="75" r="50" />
+                <circle id="handle-halo" fill="rgba(250,250,250,0.5)" filter="blur(4px)" r="12" />
+                <circle id="handle-indicator" r="9" fill="var(--accent)" stroke="white" stroke-width="1.5" />
+            </svg>
+        </div>
     </div>
 
-    <canvas id="game-canvas"></canvas>
+    <div id="view-rk" class="view">
+        <div class="header">
+            <div class="stats">Level <span id="level-val">1</span></div>
+            <div class="stats">Time <span id="rk-timer-val">0</span>s</div>
+        </div>
+        <div id="game-grid"></div>
+    </div>
+
+    <div id="view-maze" class="view">
+        <div class="header">
+            <div class="stats">Time <span id="maze-timer-val">0.0</span></div>
+            <div class="stats">Attempts <span id="attempt-val">1</span></div>
+        </div>
+        <canvas id="game-canvas"></canvas>
+    </div>
 
     <div id="win-overlay">
         <div class="win-card">
-            <h2 style="color: var(--accent); margin: 0; letter-spacing: 2px;">MAZE CLEARED</h2>
-            <p style="color: #94a3b8;">Total Time: <span id="final-time">0</span>s</p>
-            <p style="color: #94a3b8;">Total Attempts: <span id="final-attempts">0</span></p>
-            <button class="btn" onclick="initGame()">Restart Maze</button>
+            <h2 style="color: var(--accent); margin: 0; letter-spacing: 2px;">SUCCESS</h2>
+            <p style="color: #94a3b8; margin: 15px 0;">Total Time: <span id="final-total">0</span>s</p>
+            <button class="btn" onclick="location.reload()">RESTART</button>
         </div>
     </div>
 </div>
 
 <script>
-    const canvas = document.getElementById('game-canvas');
-    const ctx = canvas.getContext('2d');
-    const timerDisplay = document.getElementById('timer-val');
-    const attemptDisplay = document.getElementById('attempt-val');
-    const winOverlay = document.getElementById('win-overlay');
-
-    let player = { x: 40, y: 40, radius: 10, isDragging: false };
-    let goal = { x: 0, y: 0, width: 60, height: 60 };
-    let startTime, timerInterval;
-    let attempts = 1;
-    let walls = [];
-
-    function resize() {
-        // Match canvas to the flex container size
-        canvas.width = canvas.clientWidth;
-        canvas.height = canvas.clientHeight;
-        generateMaze();
-    }
-
-    function generateMaze() {
-        const w = canvas.width;
-        const h = canvas.height;
+    /* --- SYSTEM CONTROL --- */
+    function showView(viewId) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        const activeView = document.getElementById(viewId);
+        activeView.classList.add('active');
         
-        // Define simple maze walls [x, y, width, height]
-        // This creates a "Snake" path through the screen
-        walls = [
-            [0, 80, w * 0.8, 20],        // Wall 1
-            [w * 0.2, 180, w * 0.8, 20], // Wall 2
-            [0, 280, w * 0.8, 20],       // Wall 3
-            [w * 0.2, 380, w * 0.8, 20], // Wall 4
-            [0, 480, w * 0.8, 20],       // Wall 5
-            [w * 0.2, 580, w * 0.8, 20], // Wall 6
-            [0, 680, w * 0.8, 20],       // Wall 7
-        ];
-
-        player.x = 40;
-        player.y = 40;
-        goal.x = w - 70;
-        goal.y = h - 70;
+        if(viewId === 'view-rk') startRK();
+        if(viewId === 'view-maze') initMaze();
     }
 
-    function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    /* --- CLOCK LOGIC --- */
+    const outerRing = document.getElementById('outer-ring');
+    const innerRing = document.getElementById('inner-ring');
+    const display = document.getElementById('display');
+    let clockState = { hour: 12, minute: 0 };
 
-        // Draw Goal
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.1)';
-        ctx.strokeStyle = 'var(--accent)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.strokeRect(goal.x, goal.y, goal.width, goal.height);
-        ctx.setLineDash([]);
-        ctx.fillStyle = 'var(--accent)';
-        ctx.font = '10px Segoe UI';
-        ctx.fillText('EXIT', goal.x + 18, goal.y + 35);
+    function createNumbers(ring, count, step, radius) {
+        for (let i = 0; i < count; i++) {
+            const num = document.createElement('div');
+            num.className = 'number';
+            const val = i * step;
+            num.innerText = ring.id === 'inner-ring' ? (i === 0 ? 12 : i) : (val < 10 ? '0'+val : val);
+            const angle = (i * (360 / count)) * (Math.PI / 180);
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            num.style.left = `calc(50% + ${x}px - 15px)`;
+            num.style.top = `calc(50% + ${y}px - 15px)`;
+            ring.appendChild(num);
+        }
+    }
+    createNumbers(outerRing, 12, 5, 150);
+    createNumbers(innerRing, 12, 1, 95);
 
-        // Draw Walls
-        ctx.fillStyle = '#1e293b';
-        ctx.shadowBlur = 0;
-        walls.forEach(w => {
-            ctx.fillRect(w[0], w[1], w[2], w[3]);
-        });
+    function handleRotation(e, ring, isOuter) {
+        const rect = ring.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        let angle = Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
+        ring.style.transform = `rotate(${angle}deg)`;
+        ring.querySelectorAll('.number').forEach(n => n.style.transform = `rotate(${-angle}deg)`);
+        let normalized = (angle < 0) ? angle + 360 : angle;
+        let slice = Math.round((360 - normalized) / 30) % 12;
+        if (isOuter) clockState.minute = (slice * 5) % 60;
+        else clockState.hour = slice === 0 ? 12 : slice;
+        display.innerText = `${clockState.hour}:${clockState.minute < 10 ? '0'+clockState.minute : clockState.minute}`;
+    }
 
-        // Draw Player (The Glowy Dot)
-        ctx.beginPath();
-        ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-        ctx.fillStyle = '#fb923c';
-        ctx.shadowColor = '#fb923c';
+    function setupRing(ring, isOuter) {
+        let isDragging = false;
+        const start = () => isDragging = true;
+        const stop = () => {
+            isDragging = false;
+            const currentRotation = ring.style.transform.match(/rotate\((.*)deg\)/);
+            if (currentRotation) {
+                let angle = parseFloat(currentRotation[1]);
+                let snapped = Math.round(angle / 30) * 30;
+                ring.style.transition = 'transform 0.2s ease-out';
+                ring.style.transform = `rotate(${snapped}deg)`;
+                ring.querySelectorAll('.number').forEach(n => {
+                    n.style.transition = 'transform 0.2s';
+                    n.style.transform = `rotate(${-snapped}deg)`;
+                });
+                setTimeout(() => ring.style.transition = 'none', 200);
+            }
+        };
+        const move = (e) => { if (isDragging) handleRotation(e, ring, isOuter); };
+        ring.addEventListener('mousedown', start);
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', stop);
+        ring.addEventListener('touchstart', start);
+        window.addEventListener('touchmove', move);
+        window.addEventListener('touchend', stop);
+    }
+    setupRing(outerRing, true);
+    setupRing(innerRing, false);
+
+    /* --- LOCK LOGIC --- */
+    const progress = document.getElementById('progress');
+    const lockZone = document.getElementById('lock-zone');
+    const handleIndicator = document.getElementById('handle-indicator');
+    const handleHalo = document.getElementById('handle-halo');
+    const lockRadius = 50; 
+    const lockCenter = 75;
+    const circumference = 2 * Math.PI * lockRadius;
+    const gapAngle = 60;
+    const initialOffset = (gapAngle / 360) * circumference;
+
+    progress.style.strokeDasharray = circumference;
+    progress.style.strokeDashoffset = initialOffset;
+
+    function updateHandlePosition(degrees) {
+        const angleRad = degrees * (Math.PI / 180);
+        const x = lockCenter + lockRadius * Math.cos(angleRad);
+        const y = lockCenter + lockRadius * Math.sin(angleRad);
+        handleIndicator.setAttribute('cx', x);
+        handleIndicator.setAttribute('cy', y);
+        handleHalo.setAttribute('cx', x);
+        handleHalo.setAttribute('cy', y);
+    }
+    updateHandlePosition(300);
+
+    let isLockDragging = false;
+    const updateLock = (e) => {
+        if (!isLockDragging) return;
+        const rect = lockZone.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        let angle = Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
+        let normalized = (angle + 105 + 360) % 360;
+
+       if (normalized >= 330 || normalized <= 10) {
+            progress.style.strokeDashoffset = 0;
+            updateHandlePosition(360);
+            lockZone.style.filter = "brightness(1.5)"; 
+            isLockDragging = false;
+            setTimeout(() => showView('view-rk'), 300);
+        } else if (normalized < 330) {
+            let newOffset = circumference - (normalized / 360 * circumference);
+            if (newOffset < initialOffset) {
+                progress.style.strokeDashoffset = newOffset;
+                updateHandlePosition(normalized); 
+                lockZone.style.filter = "brightness(1.0)";
+            }
+        }
+    };
+    lockZone.addEventListener('mousedown', () => isLockDragging = true);
+    window.addEventListener('mousemove', updateLock);
+    window.addEventListener('mouseup', () => isLockDragging = false);
+    lockZone.addEventListener('touchstart', (e) => { if (e.touches.length === 1) e.preventDefault(); isLockDragging = true; }, {passive: false});
+    window.addEventListener('touchmove', updateLock, {passive: false});
+    window.addEventListener('touchend', () => isLockDragging = false);
+
+    /* --- RK GAME LOGIC --- */
+    let rkTimer = 0, rkInterval, level = 1;
+    function startRK() {
+        const grid = document.getElementById('game-grid');
+        grid.innerHTML = '';
+        rkTimer = 0; 
+        document.getElementById('rk-timer-val').innerText = rkTimer;
+        document.getElementById('level-val').innerText = level;
+        clearInterval(rkInterval);
+        rkInterval = setInterval(() => { rkTimer++; document.getElementById('rk-timer-val').innerText = rkTimer; }, 1000);
+        
+        const rowsCount = 22, charsPerRow = 18;
+        const kRow = Math.floor(Math.random() * rowsCount), kCol = Math.floor(Math.random() * charsPerRow);
+        for (let r = 0; r < rowsCount; r++) {
+            const rowDiv = document.createElement('div'); rowDiv.className = 'row';
+            for (let c = 0; c < charsPerRow; c++) {
+                const span = document.createElement('span'); span.className = 'char';
+                if (r === kRow && c === kCol) {
+                    span.textContent = 'K'; span.className += ' target';
+                    span.onclick = function() {
+                        clearInterval(rkInterval);
+                        this.style.color = 'var(--accent)';
+                        this.style.textShadow = 'var(--glow)';
+                        setTimeout(() => showView('view-maze'), 400);
+                    };
+                } else {
+                    span.textContent = 'R';
+                    span.onclick = () => { span.style.color = '#0f172a'; };
+                }
+                rowDiv.appendChild(span);
+            }
+            grid.appendChild(rowDiv);
+        }
+    }
+
+    /* --- MAZE LOGIC --- */
+    const canvas = document.getElementById('game-canvas'), ctx = canvas.getContext('2d');
+    let scaleX, scaleY, attempts = 1, mazeInterval, startTime;
+    let player = { x: 0, y: 0, radius: 37, isDragging: false };
+    
+    const mazeSegments = [
+        [286.1, -100, 286.1, 113.6], [850, 113.6, 850, 1400], [850, 1400, -100, 1400],
+        [850, 377.8, 436.8, 377.8], [436.8, 377.8, 436.8, 113.6], [436.8, 113.6, 587.7, 113.6], [587.7, 113.6, 587.7, 245.7],
+        [436.8, 377.8, 436.8, 509.9], [436.8, 509.9, 286.1, 509.9], [286.1, 509.9, 286.1, 377.8], [286.1, 377.8, 135.3, 377.8], [135.3, 377.8, 135.3, 113.6],
+        [436.8, 245.7, 286.1, 245.7], [587.7, 509.9, 587.7, 642.0], [587.7, 642.0, 436.8, 642.0], [436.8, 642.0, 436.8, 774.1], [436.8, 774.1, 286.1, 774.1], [286.1, 774.1, 286.1, 1038.3], [286.1, 1038.3, 587.7, 1038.3],
+        [587.7, 1170.4, 587.7, 906.2], [587.7, 906.2, 436.8, 906.2], [286.1, 906.2, 135.3, 906.2], [135.3, 906.2, 135.3, 642.0], [135.3, 642.0, 286.1, 642.0],
+        [135.3, 774.1, -100, 774.1], [135.3, 509.9, -100, 509.9], [135.3, 1400, 135.3, 1038.3],
+        [436.8, 1400, 436.8, 1170.4], [436.8, 1170.4, 286.1, 1170.4]
+    ];
+    
+    function drawGlowingX(x, y, size) {
+    ctx.save();
+    const glowAmount = 10 + Math.sin(pulseAngle) * 8;
+    ctx.shadowBlur = glowAmount;
+    ctx.shadowColor = "#52F2E2"; // Neon Mint Glow for the exit
+    ctx.strokeStyle = "#52F2E2";
+    ctx.lineWidth = 10 * scaleX;
+    ctx.lineCap = "round";
+
+    ctx.beginPath();
+    ctx.moveTo(x - size, y - size);
+    ctx.lineTo(x + size, y + size);
+    ctx.moveTo(x + size, y - size);
+    ctx.lineTo(x - size, y + size);
+    ctx.stroke();
+    ctx.restore();
+    
+    pulseAngle += 0.05; 
+}
+    function drawMaze() {
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.6)";
+        ctx.lineWidth = 20 * scaleX;
+        ctx.lineCap = "round";
         ctx.shadowBlur = 15;
-        ctx.fill();
-        ctx.shadowBlur = 0; // Reset for other elements
+        ctx.shadowColor = "#52F2E2";
+        
+        ctx.beginPath();
+        mazeSegments.forEach(s => {
+            ctx.moveTo(s[0] * scaleX, s[1] * scaleY);
+            ctx.lineTo(s[2] * scaleX, s[3] * scaleY);
+        });
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        drawGlowingX(62* scaleX, 1205 * scaleY, 25 * scaleX);
+    }
+
+    function distToSegment(px, py, x1, y1, x2, y2) {
+        const l2 = (x2 - x1)**2 + (y2 - y1)**2;
+        if (l2 === 0) return Math.hypot(px - x1, py - y1);
+        let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+    }
+    
+    function initMaze() {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        scaleX = canvas.width / 720;
+        scaleY = canvas.height / 1280;
+        resetMaze();
+        renderMaze();
+    }
+
+    function resetMaze() {
+        player.x = 662 * scaleX; player.y = 84 * scaleY; player.isDragging = false;
+        clearInterval(mazeInterval); startTime = null; 
+        document.getElementById('maze-timer-val').innerText = "0.0";
     }
 
     function checkCollision(nx, ny) {
-        // Check screen boundaries
-        if (nx < 10 || nx > canvas.width - 10 || ny < 10 || ny > canvas.height - 10) return true;
-
-        // Check walls
-        for (let w of walls) {
-            if (nx + 8 > w[0] && nx - 8 < w[0] + w[2] && 
-                ny + 8 > w[1] && ny - 8 < w[1] + w[3]) {
-                return true;
-            }
+        const px = nx / scaleX, py = ny / scaleY;
+        for (const [x1, y1, x2, y2] of mazeSegments) {
+            const dx = x2 - x1, dy = y2 - y1, l2 = dx*dx + dy*dy;
+            let t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l2));
+            if (Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy)) < 35) return true;
         }
         return false;
     }
 
-    function handleMove(e) {
-        if (!player.isDragging) return;
-
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    function renderMaze() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.6)"; ctx.lineWidth = 18 * scaleX; ctx.lineCap = "round";
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "#52F2E2"; // Mint glow color for the path
+        ctx.beginPath(); 
+        mazeSegments.forEach(s => { ctx.moveTo(s[0]*scaleX, s[1]*scaleY); ctx.lineTo(s[2]*scaleX, s[3]*scaleY); }); ctx.stroke();
         
-        const newX = clientX - rect.left;
-        const newY = clientY - rect.top;
+        const ex = 62 * scaleX, ey = 1205 * scaleY, sz = 30 * scaleX;
+        ctx.strokeStyle = "#52F2E2"; 
+        ctx.lineWidth = 10 * scaleX;
+        ctx.shadowBlur = 50;
+        ctx.shadowColor = "#52F2E2"; // Stronger glow for exit
+        ctx.beginPath(); 
+        ctx.moveTo(ex-sz, ey-sz); ctx.lineTo(ex+sz, ey+sz); 
+        ctx.moveTo(ex+sz, ey-sz); ctx.lineTo(ex-sz, ey+sz); 
+        ctx.stroke();
+        
+        ctx.shadowBlur = 10; ctx.shadowColor = "#F67B28";
+        ctx.fillStyle = "#F67B28"; ctx.shadowBlur = 10; ctx.shadowColor = "#F67B28";
+        ctx.beginPath(); ctx.arc(player.x, player.y, player.radius * scaleX, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0; requestAnimationFrame(renderMaze);
+    }
 
-        if (checkCollision(newX, newY)) {
-            // Hit a wall! Reset.
-            player.x = 40;
-            player.y = 40;
-            player.isDragging = false;
-            attempts++;
-            attemptDisplay.innerText = attempts;
+    const handleMazeMove = (e) => {
+        if (!player.isDragging) return;
+        const rect = canvas.getBoundingClientRect();
+        const nx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+        const ny = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+        if (!startTime) {
+            startTime = Date.now();
+            mazeInterval = setInterval(() => { document.getElementById('maze-timer-val').innerText = ((Date.now() - startTime) / 1000).toFixed(1); }, 100);
+        }
+        if (checkCollision(nx, ny)) {
+            attempts++; document.getElementById('attempt-val').innerText = attempts; resetMaze();
         } else {
-            player.x = newX;
-            player.y = newY;
-
-            // Check Win
-            if (player.x > goal.x && player.y > goal.y) {
-                handleWin();
+            player.x = nx; player.y = ny;
+            if (Math.hypot(nx - 62 * scaleX, ny - 1205 * scaleY) < 35 *scaleX) {
+                clearInterval(mazeInterval);
+                const finalMaze = parseFloat(document.getElementById('maze-timer-val').innerText);
+                document.getElementById('final-total').innerText = (rkTimer + finalMaze).toFixed(1);
+                document.getElementById('win-overlay').style.display = 'flex';
             }
         }
-        draw();
-    }
+    };
 
-    function handleWin() {
-        player.isDragging = false;
-        clearInterval(timerInterval);
-        document.getElementById('final-time').innerText = timerDisplay.innerText;
-        document.getElementById('final-attempts').innerText = attempts;
-        winOverlay.style.display = 'flex';
-    }
-
-    function initGame() {
-        attempts = 1;
-        attemptDisplay.innerText = attempts;
-        timerDisplay.innerText = 0;
-        winOverlay.style.display = 'none';
-        
-        startTime = Date.now();
-        clearInterval(timerInterval);
-        timerInterval = setInterval(() => {
-            timerDisplay.innerText = Math.floor((Date.now() - startTime) / 1000);
-        }, 1000);
-
-        resize();
-        draw();
-    }
-
-    // Interaction Listeners
-    canvas.addEventListener('mousedown', (e) => {
+    canvas.addEventListener('mousedown', (e) => { if (Math.hypot(e.offsetX - player.x, e.offsetY - player.y) < 40) player.isDragging = true; });
+    canvas.addEventListener('touchstart', (e) => { 
         const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        // Check if clicking near the dot
-        const dist = Math.hypot(mouseX - player.x, mouseY - player.y);
-        if (dist < 30) player.isDragging = true;
-    });
-
-    canvas.addEventListener('touchstart', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const touchX = e.touches[0].clientX - rect.left;
-        const touchY = e.touches[0].clientY - rect.top;
-        const dist = Math.hypot(touchX - player.x, touchY - player.y);
-        if (dist < 40) {
-            e.preventDefault(); 
-            player.isDragging = true;
+        if (Math.hypot(e.touches[0].clientX - rect.left - player.x, e.touches[0].clientY - rect.top - player.y) < 50) {
+            e.preventDefault(); player.isDragging = true;
         }
-    }, {passive: false});
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('touchmove', handleMove, {passive: false});
+    }, {passive:false});
+    window.addEventListener('mousemove', handleMazeMove);
+    window.addEventListener('touchmove', handleMazeMove, {passive:false});
     window.addEventListener('mouseup', () => player.isDragging = false);
     window.addEventListener('touchend', () => player.isDragging = false);
-
-    // Startup
-    window.onload = initGame;
 </script>
-
 </body>
 </html>
