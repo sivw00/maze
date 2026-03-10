@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Fixed Clock, RK & Maze</title>
+    <title>Fixed Clock, RK, Maze & Letter Game</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -14,6 +14,8 @@
             --glow: 0 0 15px rgba(56, 189, 248, 0.6);
             --glass: rgba(255, 255, 255, 0.05);
             --exit-mint: #52F2E2;
+            --mint: #52F2E2;
+            --orange: #F67B28;
         }
 
         body {
@@ -37,7 +39,7 @@
             position: relative;
             overflow: hidden;
             box-shadow: 0 0 50px rgba(0,0,0,0.8);
-            display: flex; /* Added to ensure children like .view fill correctly */
+            display: flex;
             flex-direction: column;
         }
 
@@ -56,6 +58,33 @@
         #outer-ring { width: 350px; height: 350px; border: 4px solid var(--ring-outer-color); box-shadow: inset 0 0 15px rgba(250,250,250,1); }
         #inner-ring { width: 250px; height: 250px; border: 4px solid var(--ring-inner-color); box-shadow: inset 0 0 15px rgba(0,0,0,1); }
         .number { position: absolute; width: 30px; height: 30px; text-align: center; line-height: 30px; font-weight: 600; font-size: 1.5rem; color: #94a3b8; }
+
+        /* --- SNOOZE BUTTON --- */
+        #snooze-btn {
+            position: absolute;
+            left: 260px;
+            top: 290px;
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 0.8rem;
+            color: white;
+            transition: all 0.3s ease;
+            z-index: 20;
+            text-transform: uppercase;
+        }
+        /* State 0: Off (Grey) */
+        .snooze-off { background: #475569; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        /* State 1: Dim Orange */
+        .snooze-dim { background: #9a4a18; box-shadow: 0 0 20px #F67B28; }
+        /* State 2: Bright Orange */
+        .snooze-bright { background: #F67B28; box-shadow: 0 0 40px #F67B28, 0 0 60px rgba(246, 123, 40, 0.4); }
 
         /* --- LOCK STYLES --- */
         .lock-section { position: absolute; bottom: -50px; right: -50px; width: 320px; height: 320px; transition: filter 0.3s ease; }
@@ -99,21 +128,66 @@
         .char { cursor: pointer; user-select: none; }
         .target { color: #0f172a; }
 
-        /* --- MAZE GAME FIXED --- */
-        #view-maze {
-            display: none;
-            flex-direction: column; /* Stacks header and canvas vertically */
-        }
-        #view-maze.active {
+        /* --- MAZE GAME --- */
+        #view-maze { display: none; flex-direction: column; }
+        #view-maze.active { display: flex; }
+        #game-canvas { flex-grow: 1; width: 100%; background: #0b1120; display: block; }
+
+        /* --- LETTER GAME STYLES --- */
+        .letter-header {
+            height: 80px;
+            background: var(--glass);
+            border-bottom: 1px solid var(--ring-inner-color);
             display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            align-items: center;
+            z-index: 10;
         }
-        #game-canvas {
-            flex-grow: 1; /* This forces the canvas to take up all available vertical space */
-            width: 100%;
+        .target-word {
+            color: var(--accent);
+            text-shadow: 0 0 10px var(--accent);
+            font-weight: 800;
+            letter-spacing: 4px;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+        }
+        .grid-container {
+            flex-grow: 1;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(12, 1fr);
+            gap: 4px;
+            padding: 15px;
             background: #0b1120;
-            display: block;
+        }
+        .letter {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: rgba(56, 189, 248, 0.4);
+            font-weight: 600;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            background: var(--glass);
+            transition: all 0.2s ease;
+            user-select: none;
+            cursor: pointer;
+        }
+        .letter.active {
+            color: #fff;
+            background: rgba(82, 242, 226, 0.2);
+            box-shadow: 0 0 15px var(--mint), inset 0 0 10px var(--mint);
+            text-shadow: 0 0 5px #fff;
+            border: 1px solid var(--mint);
+        }
+        .letter.error {
+            box-shadow: 0 0 15px var(--orange);
+            border: 1px solid var(--orange);
+            color: var(--orange);
         }
 
+        /* --- OVERLAYS --- */
         #win-overlay {
             display: none;
             position: absolute;
@@ -151,6 +225,9 @@
                 <div id="inner-ring" class="ring"></div>
             </div>
         </div>
+
+        <button id="snooze-btn" class="snooze-off">Snooze Off</button>
+
         <div class="lock-section" id="lock-zone">
             <div class="finish-label">finish</div>
             <svg viewBox="0 0 150 150" id="lock-svg">
@@ -178,10 +255,18 @@
         <canvas id="game-canvas"></canvas>
     </div>
 
+    <div id="view-letter" class="view">
+        <div class="letter-header">
+            <div class="stats">Time <span id="letter-timer-val">0</span>s</div>
+            <div class="target-word" id="word-display">P E A C H Y</div>
+        </div>
+        <div class="grid-container" id="letter-grid"></div>
+    </div>
+
     <div id="win-overlay">
         <div class="win-card">
-            <h2 style="color: var(--accent); margin: 0; letter-spacing: 2px;">SUCCESS</h2>
-            <p style="color: #94a3b8; margin: 15px 0;">Total Time: <span id="final-total">0</span>s</p>
+            <h2 id="win-title" style="color: var(--accent); margin: 0; letter-spacing: 2px;">SUCCESS</h2>
+            <p id="win-desc" style="color: #94a3b8; margin: 15px 0;">Total Time: <span id="final-total">0</span>s</p>
             <button class="btn" onclick="location.reload()">RESTART</button>
         </div>
     </div>
@@ -196,6 +281,7 @@
         
         if(viewId === 'view-rk') startRK();
         if(viewId === 'view-maze') initMaze();
+        if(viewId === 'view-letter') initLetterGame();
     }
 
     /* --- CLOCK LOGIC --- */
@@ -266,6 +352,25 @@
     setupRing(outerRing, true);
     setupRing(innerRing, false);
 
+    /* --- SNOOZE BUTTON LOGIC --- */
+    const snoozeBtn = document.getElementById('snooze-btn');
+    let snoozeState = 0; // 0=Off, 1=Dim, 2=Bright
+
+    snoozeBtn.addEventListener('click', () => {
+        snoozeState = (snoozeState + 1) % 3;
+        snoozeBtn.className = ''; // Reset classes
+        if (snoozeState === 1) {
+            snoozeBtn.classList.add('snooze-dim');
+            snoozeBtn.innerText = "Snooze 1";
+        } else if (snoozeState === 2) {
+            snoozeBtn.classList.add('snooze-bright');
+            snoozeBtn.innerText = "Snooze 2";
+        } else {
+            snoozeBtn.classList.add('snooze-off');
+            snoozeBtn.innerText = "Snooze Off";
+        }
+    });
+
     /* --- LOCK LOGIC --- */
     const progress = document.getElementById('progress');
     const lockZone = document.getElementById('lock-zone');
@@ -328,14 +433,14 @@
     let rkTimer = 0, rkInterval, level = 1;
     function startRK() {
         const grid = document.getElementById('game-grid');
-        grid.innerHTML = '';
+        grid.innerHTML = ''; 
         rkTimer = 0; 
         document.getElementById('rk-timer-val').innerText = rkTimer;
         document.getElementById('level-val').innerText = level;
         clearInterval(rkInterval);
         rkInterval = setInterval(() => { rkTimer++; document.getElementById('rk-timer-val').innerText = rkTimer; }, 1000);
         
-        const rowsCount = 22, charsPerRow = 18;
+        const rowsCount = 19, charsPerRow = 18;
         const kRow = Math.floor(Math.random() * rowsCount), kCol = Math.floor(Math.random() * charsPerRow);
         for (let r = 0; r < rowsCount; r++) {
             const rowDiv = document.createElement('div'); rowDiv.className = 'row';
@@ -362,7 +467,7 @@
     /* --- MAZE LOGIC --- */
     const canvas = document.getElementById('game-canvas'), ctx = canvas.getContext('2d');
     let scaleX, scaleY, attempts = 1, mazeInterval, startTime;
-    let player = { x: 0, y: 0, radius: 37, isDragging: false };
+    let player = { x: 0, y: 0, radius: 40, isDragging: false };
     
     const mazeSegments = [
         [286.1, -100, 286.1, 113.6], [850, 113.6, 850, 1400], [850, 1400, -100, 1400],
@@ -374,64 +479,20 @@
         [436.8, 1400, 436.8, 1170.4], [436.8, 1170.4, 286.1, 1170.4]
     ];
     
-    function drawGlowingX(x, y, size) {
-    ctx.save();
-    const glowAmount = 10 + Math.sin(pulseAngle) * 8;
-    ctx.shadowBlur = glowAmount;
-    ctx.shadowColor = "#52F2E2"; // Neon Mint Glow for the exit
-    ctx.strokeStyle = "#52F2E2";
-    ctx.lineWidth = 10 * scaleX;
-    ctx.lineCap = "round";
-
-    ctx.beginPath();
-    ctx.moveTo(x - size, y - size);
-    ctx.lineTo(x + size, y + size);
-    ctx.moveTo(x + size, y - size);
-    ctx.lineTo(x - size, y + size);
-    ctx.stroke();
-    ctx.restore();
-    
-    pulseAngle += 0.05; 
-}
-    function drawMaze() {
-        ctx.strokeStyle = "rgba(56, 189, 248, 0.6)";
-        ctx.lineWidth = 20 * scaleX;
-        ctx.lineCap = "round";
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = "#52F2E2";
-        
-        ctx.beginPath();
-        mazeSegments.forEach(s => {
-            ctx.moveTo(s[0] * scaleX, s[1] * scaleY);
-            ctx.lineTo(s[2] * scaleX, s[3] * scaleY);
-        });
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        drawGlowingX(62* scaleX, 1205 * scaleY, 25 * scaleX);
-    }
-
-    function distToSegment(px, py, x1, y1, x2, y2) {
-        const l2 = (x2 - x1)**2 + (y2 - y1)**2;
-        if (l2 === 0) return Math.hypot(px - x1, py - y1);
-        let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
-        t = Math.max(0, Math.min(1, t));
-        return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
-    }
-    
     function initMaze() {
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
         scaleX = canvas.width / 720;
         scaleY = canvas.height / 1280;
         resetMaze();
+        clearInterval(mazeInterval);
+        startTime = null;
+        document.getElementById('maze-timer-val').innerText = "0.0";
         renderMaze();
     }
 
     function resetMaze() {
         player.x = 662 * scaleX; player.y = 84 * scaleY; player.isDragging = false;
-        clearInterval(mazeInterval); startTime = null; 
-        document.getElementById('maze-timer-val').innerText = "0.0";
     }
 
     function checkCollision(nx, ny) {
@@ -448,7 +509,7 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.strokeStyle = "rgba(56, 189, 248, 0.6)"; ctx.lineWidth = 18 * scaleX; ctx.lineCap = "round";
         ctx.shadowBlur = 15;
-        ctx.shadowColor = "#52F2E2"; // Mint glow color for the path
+        ctx.shadowColor = "#52F2E2";
         ctx.beginPath(); 
         mazeSegments.forEach(s => { ctx.moveTo(s[0]*scaleX, s[1]*scaleY); ctx.lineTo(s[2]*scaleX, s[3]*scaleY); }); ctx.stroke();
         
@@ -456,14 +517,14 @@
         ctx.strokeStyle = "#52F2E2"; 
         ctx.lineWidth = 10 * scaleX;
         ctx.shadowBlur = 50;
-        ctx.shadowColor = "#52F2E2"; // Stronger glow for exit
+        ctx.shadowColor = "#52F2E2";
         ctx.beginPath(); 
         ctx.moveTo(ex-sz, ey-sz); ctx.lineTo(ex+sz, ey+sz); 
         ctx.moveTo(ex+sz, ey-sz); ctx.lineTo(ex-sz, ey+sz); 
         ctx.stroke();
         
         ctx.shadowBlur = 10; ctx.shadowColor = "#F67B28";
-        ctx.fillStyle = "#F67B28"; ctx.shadowBlur = 10; ctx.shadowColor = "#F67B28";
+        ctx.fillStyle = "#F67B28"; 
         ctx.beginPath(); ctx.arc(player.x, player.y, player.radius * scaleX, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0; requestAnimationFrame(renderMaze);
     }
@@ -483,9 +544,7 @@
             player.x = nx; player.y = ny;
             if (Math.hypot(nx - 62 * scaleX, ny - 1205 * scaleY) < 35 *scaleX) {
                 clearInterval(mazeInterval);
-                const finalMaze = parseFloat(document.getElementById('maze-timer-val').innerText);
-                document.getElementById('final-total').innerText = (rkTimer + finalMaze).toFixed(1);
-                document.getElementById('win-overlay').style.display = 'flex';
+                setTimeout(() => showView('view-letter'), 500);
             }
         }
     };
@@ -501,6 +560,86 @@
     window.addEventListener('touchmove', handleMazeMove, {passive:false});
     window.addEventListener('mouseup', () => player.isDragging = false);
     window.addEventListener('touchend', () => player.isDragging = false);
+
+    /* --- LETTER GAME LOGIC --- */
+    const targetWord = "PEACHY";
+    let letterIndex = 0;
+    let letterTimer = 0, letterInterval;
+    const gridRows = 12, gridCols = 8;
+    const letterGrid = document.getElementById('letter-grid');
+    const winOverlay = document.getElementById('win-overlay');
+
+    function initLetterGame() {
+        letterGrid.innerHTML = '';
+        letterIndex = 0;
+        letterTimer = 0;
+        document.getElementById('letter-timer-val').innerText = letterTimer;
+        winOverlay.style.display = 'none';
+        
+        clearInterval(letterInterval);
+        letterInterval = setInterval(() => { 
+            letterTimer++; 
+            document.getElementById('letter-timer-val').innerText = letterTimer; 
+        }, 1000);
+        
+        const isVertical = Math.random() > 0.5;
+        const startR = Math.floor(Math.random() * (isVertical ? (gridRows - 6) : gridRows));
+        const startC = Math.floor(Math.random() * (isVertical ? gridCols : (gridCols - 6)));
+        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        
+        for (let r = 0; r < gridRows; r++) {
+            for (let c = 0; c < gridCols; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'letter';
+                let char = '';
+                let isPartOfWord = false;
+                let wordIdx = -1;
+
+                if (isVertical && c === startC && r >= startR && r < startR + 6) {
+                    wordIdx = r - startR;
+                    char = targetWord[wordIdx];
+                    isPartOfWord = true;
+                } else if (!isVertical && r === startR && c >= startC && c < startC + 6) {
+                    wordIdx = c - startC;
+                    char = targetWord[wordIdx];
+                    isPartOfWord = true;
+                } else {
+                    char = letters[Math.floor(Math.random() * letters.length)];
+                }
+
+                cell.innerText = char;
+                cell.dataset.char = char;
+                cell.dataset.index = isPartOfWord ? wordIdx : -1;
+                cell.onclick = () => handleLetterTap(cell);
+                letterGrid.appendChild(cell);
+            }
+        }
+    }
+
+    function handleLetterTap(el) {
+        const char = el.dataset.char;
+        const wordIdx = parseInt(el.dataset.index);
+
+        if (char === targetWord[letterIndex] && wordIdx === letterIndex) {
+            el.classList.add('active');
+            letterIndex++;
+            if (letterIndex === targetWord.length) {
+                clearInterval(letterInterval);
+                const finalMazeTime = parseFloat(document.getElementById('maze-timer-val').innerText) || 0;
+                const totalTime = (rkTimer + finalMazeTime + letterTimer).toFixed(1);
+                
+                document.getElementById('win-title').innerText = "PEACHY!";
+                document.getElementById('final-total').innerText = totalTime;
+                document.getElementById('win-desc').innerHTML = `Total Time: <span id="final-total">${totalTime}</span>s`;
+                
+                setTimeout(() => { winOverlay.style.display = 'flex'; }, 300);
+            }
+        } else if (!el.classList.contains('active')) {
+            el.classList.add('error');
+            setTimeout(() => el.classList.remove('error'), 400);
+        }
+    }
 </script>
 </body>
 </html>
+
